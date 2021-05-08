@@ -112,8 +112,8 @@ function TokenSigning() { \n\
         console.log("getCertificate()"); \n\
         return messagePromise(msg); \n\
     }; \n\
-    this.sign = function(cert, hash, options) { \n\
-        var msg = {type: "SIGN", cert: cert.hex, hash: hash.hex, hashtype: hash.type, lang: options.lang, info: options.info}; \n\
+    this.sign = function(file, options) { \n\
+        var msg = {type: "SIGN", contents: file.contents, lang: options.lang, info: options.info}; \n\
         console.log("sign()"); \n\
         return messagePromise(msg); \n\
     }; \n\

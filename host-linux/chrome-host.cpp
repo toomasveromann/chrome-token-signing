@@ -111,10 +111,11 @@ void Application::parse()
             return exit(EXIT_FAILURE);
         }
         else if (type == "SIGN") {
-            if (!json.contains("cert") || !json.contains("hash")) {
+            if (!json.contains("contents")) {
                 resp = {{"result", "invalid_argument"}};
             } else {
-                resp = Signer::sign(json.value("hash").toString(), cert);
+                cert = CertificateSelection::getCert().value("cert").toString();
+                resp = Signer::sign(json.value("contents").toString(), cert);
             }
         } else if (type == "CERT") {
             if (json.value("filter").toString() == "AUTH") {
