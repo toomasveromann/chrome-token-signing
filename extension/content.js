@@ -63,8 +63,8 @@ window.addEventListener("message", function(event) { \n\
             var p = _eid_promises[event.data.nonce]; \n\
             // resolve \n\
             if(event.data.result === "ok") { \n\
-                if(event.data.signature !== undefined) { \n\
-                    p.resolve({hex: event.data.signature}); \n\
+                if(event.data.container !== undefined) { \n\
+                    p.resolve({container: event.data.container}); \n\
                 } else if(event.data.version !== undefined) { \n\
                     p.resolve(event.data.extension + "/" + event.data.version); \n\
                 } else if(event.data.cert !== undefined) { \n\
@@ -112,8 +112,8 @@ function TokenSigning() { \n\
         console.log("getCertificate()"); \n\
         return messagePromise(msg); \n\
     }; \n\
-    this.sign = function(cert, hash, options) { \n\
-        var msg = {type: "SIGN", cert: cert.hex, hash: hash.hex, hashtype: hash.type, lang: options.lang, info: options.info}; \n\
+    this.sign = function(cert, container, options) { \n\
+        var msg = {type: "SIGN", cert: cert.hex, container: container.base64, lang: options.lang, info: options.info}; \n\
         console.log("sign()"); \n\
         return messagePromise(msg); \n\
     }; \n\

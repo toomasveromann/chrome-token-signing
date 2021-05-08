@@ -30,8 +30,8 @@ window.addEventListener("message", function(event) {
             var p = _eid_promises[event.data.nonce];
             // resolve
             if(event.data.result === "ok") {
-                if(event.data.signature !== undefined) {
-                    p.resolve({hex: event.data.signature});
+                if(event.data.container !== undefined) {
+                    p.resolve({container: event.data.container});
                 } else if(event.data.version !== undefined) {
                     p.resolve(event.data.extension + "/" + event.data.version);
                 } else if(event.data.cert !== undefined) {
@@ -79,8 +79,8 @@ function TokenSigning() {
         console.log("getCertificate()");
         return messagePromise(msg);
     };
-    this.sign = function(cert, hash, options) {
-        var msg = {type: "SIGN", cert: cert.hex, hash: hash.hex, hashtype: hash.type, lang: options.lang, info: options.info};
+    this.sign = function(cert, container, options) {
+        var msg = {type: "SIGN", cert: cert.hex, container: container.base64, lang: options.lang, info: options.info};
         console.log("sign()");
         return messagePromise(msg);
     };

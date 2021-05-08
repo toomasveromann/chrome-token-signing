@@ -16,6 +16,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
+#include <random>
+
 #include "Signer.h"
 #include "CertificateSelection.h"
 
@@ -24,6 +26,7 @@
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSaveFile>
 #include <QSocketNotifier>
 
 #ifndef VERSION
@@ -47,6 +50,10 @@ public:
 private:
     void parse();
     void write(QVariantMap &resp, const QString &nonce = QString()) const;
+    std::string generateContainerName();
+    void createContainer(QJsonValue base64, const char* path);
+    int openContainerInDigiDoc4Client(std::string path, QJsonValue requestOrigin);
+    QByteArray readContainer(const char* path);
 
     QFile in;
     QString origin, cert;
@@ -66,15 +73,6 @@ void Application::parse()
 
     while (in.peek((char*)&messageLength, sizeof(messageLength)) > 0) {
         in.read((char*)&messageLength, sizeof(messageLength));
-        _log("Message size: %u", messageLength);
-        if (messageLength > 1024*8)
-        {
-            qDebug() << "Invalid message length" << messageLength;
-            resp = {{"result", "invalid_argument"}};
-            write(resp);
-            return exit(EXIT_FAILURE);
-        }
-
         QByteArray message = in.read(messageLength);
         _log("Message (%u): %s", messageLength, message.constData());
         QJsonObject json = QJsonDocument::fromJson(message).object();
@@ -111,10 +109,20 @@ void Application::parse()
             return exit(EXIT_FAILURE);
         }
         else if (type == "SIGN") {
-            if (!json.contains("cert") || !json.contains("hash")) {
+            if (!json.contains("container")) {
                 resp = {{"result", "invalid_argument"}};
             } else {
-                resp = Signer::sign(json.value("hash").toString(), cert);
+                std::string path = "/tmp/container-" + generateContainerName() + ".asice";
+                createContainer(json.value("container"), path.c_str());
+                int exitCode = openContainerInDigiDoc4Client(path, json.value("origin"));
+                // Custom exit code stating whether or not user wishes to continue
+                _log(("DigiDoc4 client exit code: " + std::to_string(exitCode)).c_str());
+                if (exitCode != 14848) {
+                    resp = {{"result", "user_cancel"}};
+                } else {
+                    QByteArray signedContainer = readContainer(path.c_str());
+                    resp = {{"container", signedContainer.toBase64()}};
+                }
             }
         } else if (type == "CERT") {
             if (json.value("filter").toString() == "AUTH") {
@@ -146,6 +154,49 @@ void Application::write(QVariantMap &resp, const QString &nonce) const
     out.open(stdout, QFile::WriteOnly);
     out.write((const char*)&responseLength, sizeof(responseLength));
     out.write(response);
+}
+
+// Modified solution from https://stackoverflow.com/a/47978023/5942672
+std::string Application::generateContainerName() {
+    std::string alphabet("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz");
+    std::random_device rd;
+    std::mt19937 generator(rd());
+    std::shuffle(alphabet.begin(), alphabet.end(), generator);
+    return alphabet.substr(0, 32);
+}
+
+// Write temporary .asice container to /tmp/
+void Application::createContainer(QJsonValue containerBase64, const char* path) {
+    QByteArray data = QByteArray::fromBase64(containerBase64.toString().toUtf8());
+    QSaveFile file(path);
+    file.open(QIODevice::WriteOnly);
+    file.write(data);
+    file.commit();    
+}
+
+// Open temp file with qdigidoc4
+int Application::openContainerInDigiDoc4Client(std::string path, QJsonValue requestOrigin) {
+    char buffer[128];
+    std::string result;
+    std::string command = "qdigidoc4 -sign-only " + path + " -source " + requestOrigin.toString().replace("https://", "").replace(QRegularExpression(":[0-9]{1,}"), "").toStdString();
+    FILE* pipe = popen(command.c_str(), "r");
+    if (!pipe) throw std::runtime_error("popen() failed!");
+    try {
+        while (fgets(buffer, sizeof buffer, pipe) != nullptr) {
+        result += buffer;
+    }
+    } catch (...) {
+        pclose(pipe);
+        throw;
+    }
+    return pclose(pipe);
+}
+
+// Read updated .asice container bytes and send response to service provider
+QByteArray Application::readContainer(const char* path) {
+    QFile container(path);
+    container.open(QIODevice::ReadOnly);
+    return container.readAll();
 }
 
 int main(int argc, char *argv[])
